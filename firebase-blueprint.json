@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "JournalInteraction": {
+      "title": "JournalInteraction",
+      "description": "A multi-turn reflective conversation session with Gemini stored under a user's isolated subcollection",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the interaction"
+        },
+        "userId": {
+          "type": "string",
+          "description": "The UID of the owner"
+        },
+        "title": {
+          "type": "string",
+          "description": "Title or headline of the reflection"
+        },
+        "mode": {
+          "type": "string",
+          "description": "The reflection lens or modality (reflection, socratic, gratitude, decision, creative)"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        },
+        "summary": {
+          "type": "string",
+          "description": "AI-generated executive summary"
+        },
+        "keyInsights": {
+          "type": "array",
+          "description": "List of key takeaways or breakthroughs"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Thematic tags"
+        },
+        "turns": {
+          "type": "array",
+          "description": "List of conversation turns between user and Gemini"
+        }
+      },
+      "required": ["id", "userId", "mode", "createdAt", "turns"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profile of the authenticated user",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "User identifier"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "User display name"
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "User avatar URL"
+        }
+      },
+      "required": ["uid"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/interactions/{interactionId}": {
+      "schema": "JournalInteraction",
+      "description": "User-isolated multi-turn reflective journal entries"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile metadata document"
+    }
+  }
+}
