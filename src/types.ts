@@ -16,6 +16,23 @@ export interface ActionPlan {
   generatedAt: string;
 }
 
+export interface DailyFocusItem {
+  id: string;
+  stepIndex: number;
+  text: string;
+  completed: boolean;
+  completedAt?: string;
+}
+
+export interface DailyFocusRecord {
+  date: string; // YYYY-MM-DD local calendar date
+  interactionId: string;
+  goal: string;
+  items: DailyFocusItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface JournalInteraction {
   id: string;
   userId: string;
@@ -28,6 +45,7 @@ export interface JournalInteraction {
   keyInsights?: string[];
   tags?: string[];
   plan?: ActionPlan;
+  dailyFocus?: Record<string, DailyFocusRecord>;
 }
 
 export interface UserProfile {

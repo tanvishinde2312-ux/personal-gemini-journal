@@ -25,8 +25,10 @@ import {
   CheckCircle2,
   Lock,
   ArrowDown,
-  Target
+  Target,
+  Calendar
 } from 'lucide-react';
+import { getLocalTodayDateString, getDailyFocusForDate } from '../lib/dailyFocus';
 
 interface ActiveSessionProps {
   interaction: JournalInteraction | null;
@@ -36,6 +38,7 @@ interface ActiveSessionProps {
   onOpenSummaryModal: () => void;
   onTurnIntoPlan: () => Promise<void>;
   onOpenPlanModal: () => void;
+  onOpenDailyFocus: () => void;
   onDeleteSession: () => void;
   onToggleSidebarMobile: () => void;
   isSummarizing: boolean;
@@ -53,6 +56,7 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
   onOpenSummaryModal,
   onTurnIntoPlan,
   onOpenPlanModal,
+  onOpenDailyFocus,
   onDeleteSession,
   onToggleSidebarMobile,
   isSummarizing,
@@ -73,6 +77,15 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
   const currentMode = interaction?.mode
     ? (REFLECTION_MODES[interaction.mode] || REFLECTION_MODES.reflection)
     : REFLECTION_MODES.reflection;
+
+  const todayStr = getLocalTodayDateString();
+  const todayFocus = getDailyFocusForDate(interaction, todayStr);
+  const todayFocusBadge = todayFocus && todayFocus.items.length > 0
+    ? ` (${todayFocus.items.filter((i) => i.completed).length}/${todayFocus.items.length})`
+    : '';
+  const todayFocusProgressText = todayFocus && todayFocus.items.length > 0
+    ? `${todayFocus.items.filter((i) => i.completed).length} of ${todayFocus.items.length} completed today`
+    : null;
 
   // Sync title when interaction changes
   useEffect(() => {
@@ -338,15 +351,28 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
 
               {/* Feature 1: Turn Reflection into a Plan Action */}
               {interaction.plan ? (
-                <button
-                  id="view-plan-btn"
-                  onClick={onOpenPlanModal}
-                  className="px-2.5 py-1 rounded-lg bg-[#8a6d4b]/15 hover:bg-[#8a6d4b]/25 border border-[#8a6d4b]/30 text-[#6a4f32] text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
-                  title="View or regenerate AI Life & Productivity Action Plan"
-                >
-                  <Target className="w-3.5 h-3.5 text-[#8a6d4b]" />
-                  <span>View Action Plan</span>
-                </button>
+                <>
+                  <button
+                    id="header-view-plan-btn"
+                    onClick={onOpenPlanModal}
+                    className="px-2.5 py-1 rounded-lg bg-[#8a6d4b]/15 hover:bg-[#8a6d4b]/25 border border-[#8a6d4b]/30 text-[#6a4f32] text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
+                    title="View or regenerate AI Life & Productivity Action Plan"
+                  >
+                    <Target className="w-3.5 h-3.5 text-[#8a6d4b]" />
+                    <span>View Plan</span>
+                  </button>
+
+                  {/* Feature 2: Daily Focus Button */}
+                  <button
+                    id="header-daily-focus-btn"
+                    onClick={onOpenDailyFocus}
+                    className="px-2.5 py-1 rounded-lg bg-[#6b7c5c]/15 hover:bg-[#6b7c5c]/25 border border-[#6b7c5c]/35 text-[#4c5a40] text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
+                    title="Open Today's Focus task list"
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-[#6b7c5c]" />
+                    <span>Today's Focus{todayFocusBadge}</span>
+                  </button>
+                </>
               ) : (
                 <button
                   id="turn-reflection-into-plan-btn"
@@ -550,24 +576,48 @@ export const ActiveSession: React.FC<ActiveSessionProps> = ({
                     </p>
                     <p className="text-[11px] text-[#78716c] line-clamp-1">
                       {interaction.plan
-                        ? `Goal: ${interaction.plan.suggestedGoal}`
+                        ? `Goal: ${interaction.plan.suggestedGoal}${todayFocusProgressText ? ` • ${todayFocusProgressText}` : ''}`
                         : 'Transform this reflection into an insight, measurable goal, and actionable steps.'}
                     </p>
                   </div>
                 </div>
-                <button
-                  id="banner-turn-into-plan-btn"
-                  onClick={interaction.plan ? onOpenPlanModal : onTurnIntoPlan}
-                  disabled={isGeneratingPlan}
-                  className="px-3 py-1.5 rounded-lg bg-[#8a6d4b] hover:bg-[#73593b] text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-2xs disabled:opacity-50"
-                >
-                  {isGeneratingPlan ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Target className="w-3.5 h-3.5" />
-                  )}
-                  <span>{isGeneratingPlan ? 'Generating Plan...' : interaction.plan ? 'View Action Plan' : 'Turn Reflection into a Plan'}</span>
-                </button>
+
+                {interaction.plan ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      id="banner-open-daily-focus-btn"
+                      onClick={onOpenDailyFocus}
+                      className="px-3 py-1.5 rounded-lg bg-[#6b7c5c] hover:bg-[#5a6a4d] text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                      title="Open Today's Focus list"
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      <span>Today's Focus{todayFocusBadge}</span>
+                    </button>
+                    <button
+                      id="banner-view-plan-btn"
+                      onClick={onOpenPlanModal}
+                      className="px-3 py-1.5 rounded-lg border border-[#dcd6cb] bg-white hover:bg-[#ede7dd] text-[#3d3a36] text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                      title="View full Action Plan"
+                    >
+                      <Target className="w-3.5 h-3.5 text-[#8a6d4b]" />
+                      <span>View Plan</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    id="banner-turn-into-plan-btn"
+                    onClick={onTurnIntoPlan}
+                    disabled={isGeneratingPlan}
+                    className="px-3 py-1.5 rounded-lg bg-[#8a6d4b] hover:bg-[#73593b] text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 shadow-2xs disabled:opacity-50"
+                  >
+                    {isGeneratingPlan ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Target className="w-3.5 h-3.5" />
+                    )}
+                    <span>{isGeneratingPlan ? 'Generating Plan...' : 'Turn Reflection into a Plan'}</span>
+                  </button>
+                )}
               </div>
             )}
 

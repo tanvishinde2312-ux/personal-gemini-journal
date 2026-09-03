@@ -19,6 +19,7 @@ import { SidebarHistory } from './components/SidebarHistory';
 import { ActiveSession } from './components/ActiveSession';
 import { SummaryModal } from './components/SummaryModal';
 import { PlanModal } from './components/PlanModal';
+import { DailyFocusModal } from './components/DailyFocusModal';
 import { DeleteConfirmModal } from './components/DeleteConfirmModal';
 import { Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
 
@@ -38,6 +39,7 @@ export default function App() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [isDailyFocusModalOpen, setIsDailyFocusModalOpen] = useState(false);
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -438,6 +440,7 @@ export default function App() {
             onOpenSummaryModal={() => setIsSummaryModalOpen(true)}
             onTurnIntoPlan={handleGeneratePlan}
             onOpenPlanModal={() => setIsPlanModalOpen(true)}
+            onOpenDailyFocus={() => setIsDailyFocusModalOpen(true)}
             onDeleteSession={() => activeInteraction && handleDeleteRequest(activeInteraction.id)}
             onToggleSidebarMobile={() => setIsSidebarMobileOpen((prev) => !prev)}
             isSummarizing={isSummarizing}
@@ -479,6 +482,16 @@ export default function App() {
         isLoading={isGeneratingPlan}
         error={planError}
         onRegenerate={handleGeneratePlan}
+        onOpenDailyFocus={() => setIsDailyFocusModalOpen(true)}
+      />
+
+      {/* Feature 2: Daily Focus Modal */}
+      <DailyFocusModal
+        isOpen={isDailyFocusModalOpen}
+        onClose={() => setIsDailyFocusModalOpen(false)}
+        interaction={activeInteraction}
+        onUpdateInteraction={handleSaveInteraction}
+        onOpenPlanModal={() => setIsPlanModalOpen(true)}
       />
 
       {/* Delete Confirmation Modal */}

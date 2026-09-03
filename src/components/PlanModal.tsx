@@ -11,7 +11,8 @@ import {
   ListTodo, 
   CalendarClock, 
   Lightbulb,
-  AlertCircle
+  AlertCircle,
+  Calendar
 } from 'lucide-react';
 
 interface PlanModalProps {
@@ -21,6 +22,7 @@ interface PlanModalProps {
   isLoading: boolean;
   error: string | null;
   onRegenerate: () => Promise<void>;
+  onOpenDailyFocus: () => void;
 }
 
 export const PlanModal: React.FC<PlanModalProps> = ({
@@ -30,6 +32,7 @@ export const PlanModal: React.FC<PlanModalProps> = ({
   isLoading,
   error,
   onRegenerate,
+  onOpenDailyFocus,
 }) => {
   const [copied, setCopied] = useState(false);
 
@@ -179,9 +182,23 @@ ${plan.nextStep}
                     <ListTodo className="w-4 h-4 text-[#6b7c5c]" />
                     <span>Suggested Action Plan</span>
                   </div>
-                  <span className="text-[11px] text-[#8c827a] font-mono">
-                    {steps.length} manageable steps
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      id="plan-steps-to-daily-focus-btn"
+                      onClick={() => {
+                        onClose();
+                        onOpenDailyFocus();
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-[#6b7c5c]/10 hover:bg-[#6b7c5c]/20 border border-[#6b7c5c]/30 text-[#4c5a40] text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Select 1–3 steps for Today's Focus"
+                    >
+                      <Calendar className="w-3.5 h-3.5 text-[#6b7c5c]" />
+                      <span>Set Today's Focus</span>
+                    </button>
+                    <span className="text-[11px] text-[#8c827a] font-mono hidden sm:inline">
+                      {steps.length} steps
+                    </span>
+                  </div>
                 </div>
 
                 <div className="space-y-2.5 pt-1">
@@ -266,6 +283,19 @@ ${plan.nextStep}
                 >
                   <RefreshCw className={`w-3.5 h-3.5 text-[#78716c] ${isLoading ? 'animate-spin' : ''}`} />
                   <span>Regenerate</span>
+                </button>
+
+                <button
+                  id="plan-footer-open-daily-focus-btn"
+                  onClick={() => {
+                    onClose();
+                    onOpenDailyFocus();
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-[#6b7c5c] hover:bg-[#5a6a4d] text-white text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                  title="Turn action plan steps into Today's Focus"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Today's Focus</span>
                 </button>
               </>
             )}

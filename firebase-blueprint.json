@@ -44,6 +44,14 @@
         "turns": {
           "type": "array",
           "description": "List of conversation turns between user and Gemini"
+        },
+        "plan": {
+          "type": "object",
+          "description": "AI-generated Action Plan containing keyInsight, suggestedGoal, actionSteps, and nextStep"
+        },
+        "dailyFocus": {
+          "type": "object",
+          "description": "Map of local calendar date (YYYY-MM-DD) to user-selected daily focus tasks"
         }
       },
       "required": ["id", "userId", "mode", "createdAt", "turns"]

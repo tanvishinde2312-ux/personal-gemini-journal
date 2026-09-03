@@ -214,6 +214,11 @@ export const SidebarHistory: React.FC<SidebarHistoryProps> = ({
                           <Target className="w-2.5 h-2.5" />
                         </span>
                       )}
+                      {item.dailyFocus && Object.keys(item.dailyFocus).length > 0 && (
+                        <span className="text-[10px] text-[#4c5a40] flex items-center gap-0.5 font-medium" title="Today's Focus Set">
+                          <Calendar className="w-2.5 h-2.5 text-[#6b7c5c]" />
+                        </span>
+                      )}
                     </div>
 
                     <button
