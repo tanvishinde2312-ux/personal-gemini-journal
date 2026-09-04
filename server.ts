@@ -1,7 +1,9 @@
 import express, { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { GoogleGenAI } from '@google/genai';
+import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { createServer as createViteServer } from 'vite';
 
 dotenv.config();
@@ -13,13 +15,105 @@ const PORT = 3000;
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Lazy initializer for Google Gen AI client
-let aiClient: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not set in the environment.');
+// Helper to safely redact API keys and sensitive tokens from logs and messages
+function sanitizeSecret(text: string): string {
+  if (!text) return '';
+  return text.replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED_API_KEY]');
+}
+
+function sanitizeError(err: any): string {
+  if (!err) return 'Unknown error occurred.';
+  const msg = typeof err === 'string' ? err : err.message || JSON.stringify(err);
+  return sanitizeSecret(msg);
+}
+
+// Detect Google Cloud Project ID from non-sensitive environment configuration or applet metadata
+function getGcpProjectId(): string | undefined {
+  if (process.env.GCP_PROJECT_ID && process.env.GCP_PROJECT_ID.trim()) {
+    return process.env.GCP_PROJECT_ID.trim();
   }
+  if (process.env.GOOGLE_CLOUD_PROJECT && process.env.GOOGLE_CLOUD_PROJECT.trim()) {
+    return process.env.GOOGLE_CLOUD_PROJECT.trim();
+  }
+  if (process.env.GCLOUD_PROJECT && process.env.GCLOUD_PROJECT.trim()) {
+    return process.env.GCLOUD_PROJECT.trim();
+  }
+
+  // Fallback check from firebase-applet-config.json if available
+  try {
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const parsed = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (parsed?.projectId && typeof parsed.projectId === 'string') {
+        return parsed.projectId.trim();
+      }
+    }
+  } catch {
+    // Ignore error reading local config
+  }
+
+  return undefined;
+}
+
+// Lazy initializer and cache for Secret Manager and Gemini AI client
+let cachedApiKey: string | null = null;
+let secretManagerClient: SecretManagerServiceClient | null = null;
+let aiClient: GoogleGenAI | null = null;
+
+/**
+ * Asynchronously retrieves the Gemini API key.
+ * Primary source: Google Cloud Secret Manager
+ * Fallback source: process.env.GEMINI_API_KEY (for local development)
+ * Values are strictly cached in-memory and never exposed in responses or logs.
+ */
+async function getGeminiApiKey(): Promise<string> {
+  if (cachedApiKey) {
+    return cachedApiKey;
+  }
+
+  const projectId = getGcpProjectId();
+  const secretName = process.env.GEMINI_API_KEY_SECRET_NAME || 'GEMINI_API_KEY';
+  const secretVersion = process.env.GEMINI_API_KEY_SECRET_VERSION || 'latest';
+
+  // 1. Attempt retrieval from Google Cloud Secret Manager if project ID is available
+  if (projectId) {
+    try {
+      if (!secretManagerClient) {
+        secretManagerClient = new SecretManagerServiceClient();
+      }
+
+      const secretPath = `projects/${projectId}/secrets/${secretName}/versions/${secretVersion}`;
+      console.log(`[Secret Manager] Accessing secret from Google Cloud Secret Manager (project: ${projectId}, secret: ${secretName}, version: ${secretVersion})...`);
+
+      const [version] = await secretManagerClient.accessSecretVersion({ name: secretPath });
+      const secretPayload = version.payload?.data?.toString();
+
+      if (secretPayload && secretPayload.trim().length > 0) {
+        cachedApiKey = secretPayload.trim();
+        console.log('[Secret Manager] Successfully retrieved Gemini API key from Secret Manager.');
+        return cachedApiKey;
+      } else {
+        console.warn('[Secret Manager] Secret payload from Secret Manager was empty.');
+      }
+    } catch (smErr: any) {
+      // Safe error logging: log sanitized status/code without exposing any credentials
+      console.warn(`[Secret Manager] Unable to retrieve secret from Secret Manager: ${sanitizeError(smErr)}`);
+    }
+  }
+
+  // 2. Safe fallback to process.env.GEMINI_API_KEY for development environment if Secret Manager was not reachable or unconfigured
+  const envKey = process.env.GEMINI_API_KEY;
+  if (envKey && envKey.trim().length > 0) {
+    cachedApiKey = envKey.trim();
+    console.log('[Gemini Engine] Using GEMINI_API_KEY from environment.');
+    return cachedApiKey;
+  }
+
+  throw new Error('Gemini API key is unavailable. Please ensure Secret Manager or GEMINI_API_KEY is configured.');
+}
+
+async function getGeminiClient(): Promise<GoogleGenAI> {
+  const apiKey = await getGeminiApiKey();
   if (!aiClient) {
     aiClient = new GoogleGenAI({ apiKey });
   }
@@ -27,13 +121,11 @@ function getGeminiClient(): GoogleGenAI {
 }
 
 // 2. Resilient Model Fallback Ladder
-// gemini-3.1-pro-preview is preferred for structured planning, reasoning, and synthesis
+// gemini-3.8-flash is preferred for fast, high-accuracy conversational reflection and planning
 const MODEL_LADDER = [
-  'gemini-3.1-pro-preview',
-  'gemini-3.6-flash',
   'gemini-3.8-flash',
-  'gemini-flash-latest',
-  'gemini-3.1-flash-lite'
+  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash'
 ];
 
 interface FallbackOptions {
@@ -48,7 +140,7 @@ interface FallbackOptions {
  * Resilient helper executing content generation with the fallback ladder
  */
 async function generateContentWithFallback(options: FallbackOptions): Promise<{ text: string; modelUsed: string }> {
-  const ai = getGeminiClient();
+  const ai = await getGeminiClient();
   let lastError: any = null;
   const candidateModels = options.models && options.models.length > 0 ? options.models : MODEL_LADDER;
 
@@ -76,28 +168,12 @@ async function generateContentWithFallback(options: FallbackOptions): Promise<{ 
       const text = response.text || '';
       return { text, modelUsed: model };
     } catch (err: any) {
-      console.warn(`[Gemini Engine] Model ${model} failed:`, err?.message || err);
+      console.warn(`[Gemini Engine] Model ${model} failed:`, sanitizeError(err));
       lastError = err;
-
-      // Check if error is recoverable (e.g. 503, 429, 404, 500, RESOURCE_EXHAUSTED)
-      const errorStr = String(err?.message || err);
-      const isRecoverable = 
-        errorStr.includes('503') || 
-        errorStr.includes('429') || 
-        errorStr.includes('404') || 
-        errorStr.includes('500') ||
-        errorStr.includes('RESOURCE_EXHAUSTED') ||
-        errorStr.includes('UNAVAILABLE') ||
-        errorStr.includes('NOT_FOUND') ||
-        errorStr.includes('overloaded');
-
-      if (!isRecoverable) {
-        // If not a transient/model-not-found error, we still try next model if available
-      }
     }
   }
 
-  throw new Error(`All models in fallback ladder failed. Last error: ${lastError?.message || lastError}`);
+  throw new Error(`All models in fallback ladder failed. Last error: ${sanitizeError(lastError)}`);
 }
 
 // Mode System Prompts
@@ -131,11 +207,19 @@ Your role is to provide a non-judgmental container where the user can breathe, l
 };
 
 // API Route: Health Check
-app.get('/api/health', (req: Request, res: Response) => {
+app.get('/api/health', async (req: Request, res: Response) => {
+  let hasGeminiKey = false;
+  try {
+    const key = await getGeminiApiKey();
+    hasGeminiKey = Boolean(key && key.length > 0);
+  } catch {
+    hasGeminiKey = false;
+  }
+
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY)
+    hasGeminiKey
   });
 });
 
@@ -183,9 +267,10 @@ app.post('/api/gemini/chat', async (req: Request, res: Response): Promise<void> 
       modelUsed: result.modelUsed,
     });
   } catch (error: any) {
-    console.error('Error in /api/gemini/chat:', error);
+    const safeError = sanitizeError(error);
+    console.error('Error in /api/gemini/chat:', safeError);
     res.status(500).json({
-      error: error?.message || 'Failed to generate reflection response.',
+      error: safeError || 'Failed to generate reflection response.',
     });
   }
 });
@@ -246,9 +331,10 @@ Return a valid JSON object matching this schema strictly:
       });
     }
   } catch (error: any) {
-    console.error('Error in /api/gemini/summarize:', error);
+    const safeError = sanitizeError(error);
+    console.error('Error in /api/gemini/summarize:', safeError);
     res.status(500).json({
-      error: error?.message || 'Failed to synthesize journal session.',
+      error: safeError || 'Failed to synthesize journal session.',
     });
   }
 });
@@ -381,7 +467,7 @@ Output strictly valid JSON with this exact schema:
     let result: { text: string; modelUsed: string } | null = null;
     try {
       result = await generateContentWithFallback({
-        models: ['gemini-3.1-pro-preview', 'gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-flash-latest'],
+        models: ['gemini-3.8-flash', 'gemini-3.1-flash-lite', 'gemini-3.6-flash'],
         systemInstruction,
         responseMimeType: "application/json",
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -433,12 +519,13 @@ Output strictly valid JSON with this exact schema:
 
     res.json({
       plan,
-      modelUsed: 'gemini-3.1-pro-preview',
+      modelUsed: 'gemini-3.8-flash',
     });
   } catch (error: any) {
-    console.error('Error in /api/gemini/plan:', error);
+    const safeError = sanitizeError(error);
+    console.error('Error in /api/gemini/plan:', safeError);
     res.status(500).json({
-      error: error?.message || 'Failed to generate action plan from reflection.',
+      error: safeError || 'Failed to generate action plan from reflection.',
     });
   }
 });

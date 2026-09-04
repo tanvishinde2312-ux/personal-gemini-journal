@@ -1,6 +1,6 @@
 {
   "name": "Gemini Journal & Reflections",
-  "description": "Personal AI life & student productivity assistant powered by Gemini 3.6 Flash and Cloud Firestore with reflective journaling, AI insights, goals, and structured action plans.",
+  "description": "Personal AI life & student productivity assistant powered by Gemini 3.8 Flash and Cloud Firestore with reflective journaling, AI insights, goals, and structured action plans.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
